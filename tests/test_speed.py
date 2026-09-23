@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import sys
+import wave
 
 import pytest
 
@@ -56,6 +57,7 @@ def _install_fakes(monkeypatch, tts_core, calls):
         calls["speed_arg"] = speed
         calls["model"] = model
         calls["voice_arg"] = voice
+        calls["response_format"] = response_format
         return b"ID3fake-audio-bytes"
 
     def fake_stretch(path, rate):
@@ -120,6 +122,32 @@ def test_speed_one_is_a_no_op(tts_core, monkeypatch, tmp_path):
 
     assert calls["speed_arg"] is None
     assert "stretched_with" not in calls
+
+
+def test_configured_pcm_response_is_wrapped_as_wav(tts_core, monkeypatch, tmp_path):
+    calls: dict = {}
+    _install_fakes(monkeypatch, tts_core, calls)
+    monkeypatch.setattr(tts_core, "resolve_tts_settings", lambda explicit="": {
+        "model": "google/gemini-3.1-flash-tts-preview",
+        "voice": "Zephyr",
+        "base_url": "https://x/v1",
+        "speed": 1.0,
+        "file_format": "pcm",
+        "api_key": "k",
+    })
+    monkeypatch.setattr(tts_core, "synthesize_request", lambda *args, **kwargs: (
+        calls.update(response_format=kwargs["response_format"]) or b"\x00\x00" * 24
+    ))
+
+    result = tts_core.synthesize_to_file("hello", str(tmp_path / "reply.mp3"))
+
+    assert calls["response_format"] == "pcm"
+    assert result.endswith("reply.wav")
+    with wave.open(result, "rb") as audio:
+        assert audio.getframerate() == 24000
+        assert audio.getnchannels() == 1
+        assert audio.getsampwidth() == 2
+        assert audio.readframes(audio.getnframes()) == b"\x00\x00" * 24
 
 
 def test_speed_is_clamped_to_the_tool_range(tts_core, monkeypatch, tmp_path):

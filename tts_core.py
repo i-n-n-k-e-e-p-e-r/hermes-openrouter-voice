@@ -7,6 +7,7 @@ itself, unlike the STT side where the provider returns one.
 from __future__ import annotations
 
 import pathlib
+import wave
 from typing import Any, Optional
 
 from hermes_openrouter_voice_common import (
@@ -19,6 +20,8 @@ from hermes_openrouter_voice_common import (
     time_stretch,
     voices_for_model,
 )
+
+_PCM_SAMPLE_RATE = 24000
 
 
 def synthesize_to_file(
@@ -33,14 +36,17 @@ def synthesize_to_file(
 ) -> str:
     """Write synthesized audio for ``text`` and return the written path.
 
-    Always requests mp3: that is what the shipped default was verified with, and models in the
-    catalog disagree about other containers (``google/gemini-3.1-flash-tts-preview`` wants ``pcm``).
-    A non-mp3 ``output_path`` therefore becomes ``<name>.mp3`` so the extension matches the bytes.
+    ``tts.openrouter.file_format`` selects the OpenRouter response format (``mp3`` by default,
+    ``pcm`` for Gemini). Raw PCM is wrapped in a 24 kHz mono WAV container so downstream players can
+    identify it; the returned path always has an extension matching the actual file.
 
     ``speed`` (0.25-4.0) is honoured on every model: natively where the provider supports it, and by
     local ffmpeg time-stretch elsewhere — see ``SPEED_NATIVE_MODELS`` for the measured split.
     """
     settings = resolve_tts_settings(config)
+    file_format = str(settings.get("file_format") or "mp3").strip().lower()
+    if file_format not in {"mp3", "pcm"}:
+        raise ValueError("tts.openrouter.file_format must be 'mp3' or 'pcm'")
 
     chosen_model = (model or settings["model"] or DEFAULT_TTS_MODEL).strip()
     if "/" not in chosen_model:
@@ -71,19 +77,32 @@ def synthesize_to_file(
     audio = synthesize_request(
         text, model=chosen_model, voice=chosen_voice, speed=native_speed,
         base_url=settings["base_url"], key=key, instructions=instructions,
+        response_format=file_format,
     )
     if not audio:
         raise RuntimeError("OpenRouter speech returned no audio")
 
     target = pathlib.Path(output_path).expanduser()
-    if target.suffix.lower() != ".mp3":
+    if file_format == "pcm":
+        target = target.with_suffix(".wav")
+    else:
         target = target.with_suffix(".mp3")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(audio)
+    if file_format == "pcm":
+        with wave.open(str(target), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(_PCM_SAMPLE_RATE)
+            wav_file.writeframes(audio)
+    else:
+        target.write_bytes(audio)
 
     if local_stretch != 1.0:
         stretched = time_stretch(str(target), local_stretch)
         if stretched != str(target):
-            target.write_bytes(pathlib.Path(stretched).read_bytes())
+            if file_format == "pcm":
+                target = pathlib.Path(stretched)
+            else:
+                target.write_bytes(pathlib.Path(stretched).read_bytes())
 
     return str(target)

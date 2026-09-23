@@ -80,6 +80,17 @@ def test_voices_for_model_is_total(common):
     assert common.voices_for_model("") == ()
 
 
+def test_resolve_tts_settings_reads_openrouter_file_format(common, monkeypatch):
+    monkeypatch.setattr(common, "_section", lambda kind, explicit="": {
+        "openrouter": {"file_format": "pcm"}
+    } if kind == "tts" else {})
+    monkeypatch.setattr(common, "api_key", lambda: "test-key")
+
+    settings = common.resolve_tts_settings()
+
+    assert settings["file_format"] == "pcm"
+
+
 def test_providers_expose_the_catalogs_to_the_catalog_surface():
     """`hermes tools` / the dashboard list models via the provider, not the module constants."""
     pytest.importorskip("agent.transcription_provider", reason="needs a Hermes environment")

@@ -105,7 +105,7 @@ system default and the row says so, rather than switching silently.
 | Sample rate | `meta/muse-voice-transcribe-1.0` requires **16 or 24 kHz mono WAV**; 22.05 kHz is a live 400. PCM WAV is normalised in pure Python, no ffmpeg |
 | Containers | every model but that one accepts MP3/WebM; the desktop records `audio/webm;codecs=opus`, which needs **ffmpeg** to reach a WAV-only model |
 | Truncation | `hexgrad/kokoro-82m` returns **only the first sentence** — not the default |
-| Format | `google/gemini-3.1-flash-tts-preview` rejects mp3 and demands `pcm`, so mp3 is always requested |
+| Format | `google/gemini-3.1-flash-tts-preview` requires `pcm`; configure `tts.openrouter.file_format: pcm`. The raw 24 kHz PCM is wrapped as WAV for playback |
 | Voices | model-specific: `aura-2-*` for `deepgram/aura-2`, `af_heart` for Kokoro |
 | Verified default | `deepgram/aura-2` + `aura-2-thalia-en` — speaks multi-sentence input in full |
 
@@ -122,6 +122,17 @@ python models.py --live              # diff the shipped lists against the API
 | `stt.openrouter.model` | **21** transcription models | `GET /api/v1/models?output_modalities=transcription` |
 | `tts.openrouter.model` | **18** speech models | `GET /api/v1/models?output_modalities=speech` |
 | `tts.openrouter.voice` | **361** voices across 16 models | each model's `supported_voices` (there is no voices endpoint) |
+| `tts.openrouter.file_format` | `mp3` by default; `pcm` for Gemini TTS | OpenRouter speech response format; PCM is wrapped as 24 kHz mono WAV |
+
+For Gemini TTS, configure the model's required response format explicitly:
+
+```yaml
+tts:
+  openrouter:
+    model: google/gemini-3.1-flash-tts-preview
+    voice: Zephyr
+    file_format: pcm
+```
 
 Voice counts: `deepgram/aura-2` 90, `hexgrad/kokoro-82m` 54, `minimax/speech-2.8-*` 45,
 `mistralai/voxtral-mini-tts-2603` 30, `microsoft/mai-voice-2` 4, `fish-audio/*` **none published**

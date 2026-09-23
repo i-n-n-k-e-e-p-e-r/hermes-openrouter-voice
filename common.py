@@ -703,6 +703,7 @@ def resolve_tts_settings(explicit_config: str = "") -> Dict[str, Any]:
                  or DEFAULT_TTS_MODEL,
         "voice": _first_string(per_provider.get("voice"), _command_block(section).get("voice"))
                  or DEFAULT_TTS_VOICE,
+        "file_format": _first_string(per_provider.get("file_format")).lower() or "mp3",
         "base_url": _first_string(per_provider.get("base_url")).rstrip("/") or DEFAULT_TTS_BASE_URL,
         "speed": speed,
         "api_key": api_key(),
@@ -923,11 +924,7 @@ def transcribe_request(audio_path: str, *, model: str, language: str, base_url: 
 
 def synthesize_request(text: str, *, model: str, voice: str, speed: Any, base_url: str, key: str,
                        instructions: str = "", response_format: str = "mp3") -> bytes:
-    """POST to ``/audio/speech`` and return the audio bytes (mp3 unless told otherwise).
-
-    ``response_format`` is left at mp3 deliberately: it is what the shipped default model was
-    verified with, and some catalog models reject anything else (gemini wants ``pcm``).
-    """
+    """POST to ``/audio/speech`` and return the audio bytes in the requested response format."""
     body: Dict[str, Any] = {"model": model, "input": text, "response_format": response_format}
     if voice and voice.strip():
         # Omitted, not empty: models that publish no voices speak with the provider default, and an
